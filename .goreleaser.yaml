@@ -1,0 +1,64 @@
+# GoReleaser config: https://goreleaser.com/customization/
+# Test locally with `task release-snapshot`; releases are published by
+# .github/workflows/release.yml when a v* tag is pushed.
+version: 2
+
+project_name: ktv
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - main: ./cmd/ktv
+    binary: ktv
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    # The version comes from the git tag via Go's VCS stamping (see
+    # internal/cli/version.go), so no -X flags are needed.
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+    #  - windows
+    goarch:
+      - amd64
+      - arm64
+    # Reproducible builds: use the commit time rather than the build time.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    # Ship only the binary. Omitting `files` doesn't work, because GoReleaser
+    # then adds LICENSE*, README* and CHANGELOG* by default.
+    files:
+      - none*
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  abbrev: 7
+  groups:
+    - title: Features
+      regexp: '^feat:'
+      order: 0
+    - title: Bug fixes
+      regexp: '^fix:'
+      order: 1
+  filters:
+    exclude:
+      - '^docs:'
+      - '^chore:'
+
+release:
+  github:
+    owner: jakemalley
+    name: ktv
