@@ -1,0 +1,17 @@
+{
+  "image": "dev-go:latest",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "anthropic.claude-code"
+      ]
+    }
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/home/code/.claude,type=bind,consistency=cached"
+  ],
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/code/.claude"
+  }
+}

@@ -1,0 +1,103 @@
+---
+version: "3"
+
+vars:
+  DEFAULT_BIN: ktv
+  BUILD_BINS:
+    sh: find cmd/ -mindepth 1 -maxdepth 1 -type d -exec basename {} \;
+
+tasks:
+  build-go:
+    internal: true
+    label: "build-go-{{ .BUILD_BIN }}"
+    cmds:
+      - go build {{ .GO_BUILD_FLAGS }} -o ./{{ .BUILD_BIN }} {{ .BUILD }}
+    vars:
+      GO_BUILD_FLAGS: -ldflags="-s -w" -trimpath
+    env:
+      CGO_ENABLED: 0
+    sources:
+      - "**/*.go"
+    generates:
+      - "{{ .BUILD_BIN }}"
+
+  build:
+    desc: Build the binary
+    cmds:
+      - for:
+          var: BUILD_BINS
+        task: build-go
+        vars:
+          BUILD: "./cmd/{{ .ITEM }}"
+          BUILD_BIN: "{{ .ITEM }}"
+
+  run:
+    desc: Build and run the binary
+    cmds:
+      - task: build
+      - "./{{ .BIN }} {{ .CLI_ARGS }}"
+    vars:
+      BIN: "{{ .BIN | default .DEFAULT_BIN }}"
+
+  mod-tidy:
+    desc: Run go mod tidy
+    cmds:
+      - go mod tidy
+    sources:
+      - "**/*.go"
+      - go.mod
+    generates:
+      - go.sum
+
+  check-go-vet:
+    internal: true
+    cmds:
+      - o=$(go vet ./... 2>&1) || (echo -e "\033[31mERROR\033[0m go vet failed:\n$o"; exit 1)
+    sources:
+      - "**/*.go"
+
+  check-go-fmt:
+    internal: true
+    cmds:
+      - o=$(gofmt -s -d . 2>&1) || (echo -e "\033[31mERROR\033[0m gofmt failed:\n$o"; exit 1)
+    sources:
+      - "**/*.go"
+
+  check-go-staticcheck:
+    internal: true
+    cmds:
+      - o=$(staticcheck ./... 2>&1) || (echo -e "\033[31mERROR\033[0m staticcheck failed:\n$o"; exit 1)
+    sources:
+      - "**/*.go"
+
+  check:
+    desc: Run formatting and code checks
+    deps: [check-go-vet, check-go-fmt, check-go-staticcheck]
+
+  test:
+    desc: Run the tests and write a coverage profile to coverage.out
+    cmds:
+      # -coverpkg counts coverage across packages, e.g. calc code exercised by the cli tests
+      - go test -coverpkg=./... -coverprofile=coverage.out {{ .CLI_ARGS }} ./...
+
+  cover:
+    desc: Run the tests, print per-function coverage and write coverage.html
+    cmds:
+      - task: test
+      - go tool cover -func=coverage.out
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Wrote coverage.html"
+
+  release-snapshot:
+    desc: Build release artifacts locally into dist/ without publishing
+    cmds:
+      - goreleaser release --snapshot --clean
+
+  clean:
+    desc: Clean the project
+    cmds:
+      - for:
+          var: BUILD_BINS
+        cmd: "rm -f ./{{ .ITEM }}"
+      - rm -f coverage.out coverage.html
+      - rm -rf dist
